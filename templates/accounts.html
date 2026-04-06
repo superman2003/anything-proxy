@@ -1,0 +1,1115 @@
+{% extends "base.html" %}
+{% block title %}账号管理{% endblock %}
+{% block body %}
+<div class="min-h-screen" x-data="accountsApp()" x-init="init()">
+    <!-- Header -->
+    <header class="bg-white border-b border-gray-200 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center">
+                    <svg class="w-5 h-5 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"></path>
+                    </svg>
+                </div>
+                <h1 class="text-xl font-bold text-gray-800">Anything Proxy</h1>
+                <span class="text-xs bg-primary/10 text-primary px-2 py-0.5 rounded-full font-medium">管理后台</span>
+            </div>
+            <button @click="logout" class="text-sm text-gray-500 hover:text-red-500 transition">退出登录</button>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6">
+        <!-- Tab Bar -->
+        <div class="bg-white rounded-xl border border-gray-100 shadow-sm">
+            <div class="flex border-b border-gray-100">
+                <button @click="activeTab = 'accounts'"
+                    class="px-6 py-3 text-sm font-medium transition border-b-2 -mb-px"
+                    :class="activeTab === 'accounts' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'">
+                    <span class="flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <span>Anything 账号</span>
+                    </span>
+                </button>
+                <button @click="activeTab = 'outlook'; loadOutlookAccounts()"
+                    class="px-6 py-3 text-sm font-medium transition border-b-2 -mb-px"
+                    :class="activeTab === 'outlook' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'">
+                    <span class="flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                        <span>Outlook 导入</span>
+                    </span>
+                </button>
+                <button @click="activeTab = 'keys'; loadApiKeys()"
+                    class="px-6 py-3 text-sm font-medium transition border-b-2 -mb-px"
+                    :class="activeTab === 'keys' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'">
+                    <span class="flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                        <span>API 密钥</span>
+                    </span>
+                </button>
+                <button @click="activeTab = 'usage'; loadUsageStats()"
+                    class="px-6 py-3 text-sm font-medium transition border-b-2 -mb-px"
+                    :class="activeTab === 'usage' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'">
+                    <span class="flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+                        <span>使用日志</span>
+                    </span>
+                </button>
+                <button @click="activeTab = 'config'"
+                    class="px-6 py-3 text-sm font-medium transition border-b-2 -mb-px"
+                    :class="activeTab === 'config' ? 'border-primary text-primary' : 'border-transparent text-gray-500 hover:text-gray-700'">
+                    <span class="flex items-center space-x-2">
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                        <span>接入配置</span>
+                    </span>
+                </button>
+            </div>
+        </div>
+
+        <!-- ======================== Anything Accounts Tab ======================== -->
+        <template x-if="activeTab === 'accounts'">
+            <div class="space-y-6">
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">总账号数</p>
+                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="stats.total_accounts">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">活跃账号</p>
+                                <p class="text-2xl font-bold text-green-600 mt-1" x-text="stats.active_accounts">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">异常账号</p>
+                                <p class="text-2xl font-bold text-red-500 mt-1" x-text="stats.error_accounts">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">总请求数</p>
+                                <p class="text-2xl font-bold text-purple-600 mt-1" x-text="stats.total_requests">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-purple-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Action Bar -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <button @click="showAddModal = true"
+                            class="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg transition flex items-center space-x-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            <span>添加账号</span>
+                        </button>
+                        <button @click="showImportModal = true"
+                            class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition">
+                            批量导入
+                        </button>
+                        <button @click="deleteSelectedAccounts" :disabled="bulkLoading || selectedAccountIds.length === 0"
+                            class="px-4 py-2 border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 text-sm font-medium rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed">
+                            <span x-text="selectedAccountIds.length > 0 ? `批量删除 (${selectedAccountIds.length})` : '批量删除'"></span>
+                        </button>
+                        <button @click="refreshAll" :disabled="bulkLoading"
+                            class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition disabled:opacity-50">
+                            <span x-show="!bulkLoading">全部刷新</span>
+                            <span x-show="bulkLoading">处理中...</span>
+                        </button>
+                        <button @click="checkAll" :disabled="bulkLoading"
+                            class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition disabled:opacity-50">
+                            <span x-show="!bulkLoading">全部检测</span>
+                            <span x-show="bulkLoading">处理中...</span>
+                        </button>
+                        <button @click="checkAllBalances" :disabled="bulkLoading"
+                            class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition disabled:opacity-50">
+                            <span x-show="!bulkLoading">查询额度</span>
+                            <span x-show="bulkLoading">处理中...</span>
+                        </button>
+
+                        <div class="flex-1"></div>
+
+                        <div x-show="selectedAccountIds.length > 0" class="text-sm text-gray-500">
+                            已选 <span class="font-medium text-gray-700" x-text="selectedAccountIds.length"></span> 项
+                        </div>
+
+                        <!-- Filter -->
+                        <select x-model="filterStatus" @change="loadAccounts"
+                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                            <option value="">全部状态</option>
+                            <option value="active">活跃</option>
+                            <option value="error">错误</option>
+                            <option value="token_expired">Token过期</option>
+                            <option value="banned">封禁</option>
+                            <option value="disabled">已禁用</option>
+                        </select>
+                        <input type="text" x-model="searchKeyword" @input.debounce.300ms="loadAccounts"
+                            placeholder="搜索名称/邮箱..."
+                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm w-48 focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                    </div>
+                </div>
+
+                <!-- Accounts Table -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 w-12 text-center">
+                                        <input type="checkbox"
+                                            :checked="allVisibleAccountsSelected()"
+                                            @change="toggleAllAccountSelections($event.target.checked)"
+                                            :disabled="accounts.length === 0"
+                                            class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50 disabled:opacity-50">
+                                    </th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">名称</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">邮箱</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">额度</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">请求数</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">最近使用</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="acc in accounts" :key="acc.id">
+                                    <tr class="transition" :class="isAccountSelected(acc.id) ? 'bg-primary/5 hover:bg-primary/10' : 'hover:bg-gray-50'">
+                                        <td class="px-4 py-3 text-center">
+                                            <input type="checkbox"
+                                                :checked="isAccountSelected(acc.id)"
+                                                @change="toggleAccountSelection(acc.id, $event.target.checked)"
+                                                class="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50">
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <div class="font-medium text-gray-800 text-sm" x-text="acc.name || '未命名'"></div>
+                                            <div class="text-xs text-gray-400 mt-0.5" x-text="'ID: ' + acc.id"></div>
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-gray-600" x-text="acc.email || '-'"></td>
+                                        <td class="px-4 py-3">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                                                :class="statusClass(acc)">
+                                                <span x-text="statusText(acc)"></span>
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center space-x-1">
+                                                <span class="text-sm font-medium"
+                                                    :class="acc.credit_balance === null || acc.credit_balance === undefined ? 'text-gray-400' : acc.credit_balance > 0 ? 'text-green-600' : 'text-red-500'"
+                                                    x-text="formatBalance(acc.credit_balance)"></span>
+                                                <button @click="checkBalance(acc.id)" title="查询额度" :disabled="acc._checkingBalance"
+                                                    class="p-0.5 text-gray-300 hover:text-primary rounded transition disabled:opacity-50">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                                </button>
+                                            </div>
+                                            <div class="text-xs text-gray-400" x-show="acc.plan" x-text="acc.plan"></div>
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-gray-600" x-text="acc.total_requests"></td>
+                                        <td class="px-4 py-3 text-xs text-gray-500" x-text="formatTime(acc.last_used_at)"></td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center space-x-1">
+                                                <button @click="editAccount(acc)" title="编辑"
+                                                    class="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                                </button>
+                                                <button @click="checkAccount(acc.id)" title="检测" :disabled="acc._checking"
+                                                    class="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition disabled:opacity-50">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                                                </button>
+                                                <button @click="refreshAccount(acc.id)" title="刷新Token" :disabled="acc._refreshing"
+                                                    class="p-1.5 text-gray-400 hover:text-yellow-500 hover:bg-yellow-50 rounded-lg transition disabled:opacity-50">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                                </button>
+                                                <button @click="toggleAccount(acc.id, acc.is_active)" :title="acc.is_active ? '禁用' : '启用'"
+                                                    class="p-1.5 rounded-lg transition"
+                                                    :class="acc.is_active ? 'text-gray-400 hover:text-orange-500 hover:bg-orange-50' : 'text-orange-400 hover:text-green-500 hover:bg-green-50'">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+                                                </button>
+                                                <button @click="deleteAccount(acc.id, acc.name)" title="删除"
+                                                    class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div x-show="accounts.length === 0" class="text-center py-12 text-gray-400">
+                        <svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"></path></svg>
+                        <p>暂无账号，点击"添加账号"开始</p>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- ======================== Outlook Tab ======================== -->
+        <template x-if="activeTab === 'outlook'">
+            <div class="space-y-6">
+                <!-- Outlook Stats -->
+                <div class="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">总邮箱数</p>
+                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="outlookStats.total">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">待处理</p>
+                                <p class="text-2xl font-bold text-yellow-500 mt-1" x-text="outlookStats.pending">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-yellow-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">已关联</p>
+                                <p class="text-2xl font-bold text-green-600 mt-1" x-text="outlookStats.linked">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">失败</p>
+                                <p class="text-2xl font-bold text-red-500 mt-1" x-text="outlookStats.error">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Outlook Action Bar -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <button @click="showOutlookImportModal = true"
+                            class="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg transition flex items-center space-x-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            <span>导入 Outlook 邮箱</span>
+                        </button>
+                        <button @click="loginAllOutlook" :disabled="outlookBulkLoading"
+                            class="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition disabled:opacity-50 flex items-center space-x-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            <span x-show="!outlookBulkLoading">一键全部登录</span>
+                            <span x-show="outlookBulkLoading">登录中...</span>
+                        </button>
+
+                        <div class="flex-1"></div>
+
+                        <div class="text-xs text-gray-400">
+                            格式: email----password----client_id----ms_refresh_token
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Outlook Accounts Table -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">邮箱</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">关联账号</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">错误信息</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="acc in outlookAccounts" :key="acc.id">
+                                    <tr class="hover:bg-gray-50 transition">
+                                        <td class="px-4 py-3">
+                                            <div class="font-medium text-gray-800 text-sm" x-text="acc.email"></div>
+                                            <div class="text-xs text-gray-400 mt-0.5" x-text="'ID: ' + acc.id"></div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                                                :class="outlookStatusClass(acc.status)">
+                                                <span x-text="outlookStatusText(acc.status)"></span>
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-gray-600" x-text="acc.linked_account_id ? '#' + acc.linked_account_id : '-'"></td>
+                                        <td class="px-4 py-3">
+                                            <div class="text-xs text-red-500 max-w-xs truncate" x-text="acc.last_error || '-'" :title="acc.last_error"></div>
+                                        </td>
+                                        <td class="px-4 py-3 text-xs text-gray-500" x-text="formatTime(acc.created_at)"></td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center space-x-1">
+                                                <button @click="editOutlookAccount(acc)" title="编辑"
+                                                    class="p-1.5 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"></path></svg>
+                                                </button>
+                                                <button @click="loginOutlookAccount(acc.id)" title="自动登录"
+                                                    :disabled="acc._logging || acc.status === 'linked'"
+                                                    class="p-1.5 text-gray-400 hover:text-green-500 hover:bg-green-50 rounded-lg transition disabled:opacity-50">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1"></path></svg>
+                                                </button>
+                                                <button @click="reloginOutlookAccount(acc.id)" title="重新登录"
+                                                    :disabled="acc._relogging"
+                                                    class="p-1.5 text-gray-400 hover:text-orange-500 hover:bg-orange-50 rounded-lg transition disabled:opacity-50">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+                                                </button>
+                                                <button @click="deleteOutlookAccount(acc.id, acc.email)" title="删除"
+                                                    class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div x-show="outlookAccounts.length === 0" class="text-center py-12 text-gray-400">
+                        <svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                        <p>暂无 Outlook 邮箱，点击"导入 Outlook 邮箱"开始</p>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- ======================== API Keys Tab ======================== -->
+        <template x-if="activeTab === 'keys'">
+            <div class="space-y-6">
+                <!-- Create Key -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <input type="text" x-model="newKeyName" placeholder="密钥名称（可选）"
+                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm w-48 focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                        <button @click="createApiKey" :disabled="creatingKey"
+                            class="px-4 py-2 bg-primary hover:bg-primary-dark text-white text-sm font-medium rounded-lg transition disabled:opacity-50 flex items-center space-x-1">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                            <span>生成新密钥</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Newly Created Key Display -->
+                <div x-show="newlyCreatedKey" class="bg-green-50 border border-green-200 rounded-xl p-4">
+                    <p class="text-sm font-medium text-green-800 mb-2">新密钥已生成，请立即复制保存（仅显示一次）：</p>
+                    <div class="flex items-center space-x-2">
+                        <code class="flex-1 bg-white px-4 py-2.5 rounded-lg text-sm font-mono text-gray-800 border border-green-300 select-all" x-text="newlyCreatedKey"></code>
+                        <button @click="navigator.clipboard.writeText(newlyCreatedKey); showToast('密钥已复制')"
+                            class="px-3 py-2.5 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700 transition">复制</button>
+                    </div>
+                </div>
+
+                <!-- Keys Table -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">名称</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">密钥</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">请求数</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">总 Tokens</th>
+                                    <th class="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">预估费用</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">创建时间</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">最近使用</th>
+                                    <th class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="k in apiKeys" :key="k.id">
+                                    <tr class="hover:bg-gray-50 transition">
+                                        <td class="px-4 py-3">
+                                            <div class="font-medium text-gray-800 text-sm" x-text="k.name || '未命名'"></div>
+                                            <div class="text-xs text-gray-400 mt-0.5" x-text="'ID: ' + k.id"></div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <div class="flex items-center space-x-2">
+                                                <code class="text-xs font-mono text-gray-600 bg-gray-50 px-2 py-1 rounded" x-text="maskKey(k.key)"></code>
+                                                <button @click="navigator.clipboard.writeText(k.key); showToast('密钥已复制')" title="复制完整密钥"
+                                                    class="p-1 text-gray-400 hover:text-primary rounded transition">
+                                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+                                                </button>
+                                            </div>
+                                        </td>
+                                        <td class="px-4 py-3">
+                                            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium"
+                                                :class="k.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'">
+                                                <span x-text="k.is_active ? '启用' : '禁用'"></span>
+                                            </span>
+                                        </td>
+                                        <td class="px-4 py-3 text-sm text-right text-gray-600" x-text="formatNumber(k.total_requests)"></td>
+                                        <td class="px-4 py-3 text-sm text-right font-mono text-gray-600" x-text="formatNumber(k.total_tokens)"></td>
+                                        <td class="px-4 py-3 text-sm text-right font-mono text-emerald-600" x-text="formatUsd(k.total_cost_usd)"></td>
+                                        <td class="px-4 py-3 text-xs text-gray-500" x-text="formatTime(k.created_at)"></td>
+                                        <td class="px-4 py-3 text-xs text-gray-500" x-text="formatTime(k.last_used_at)"></td>
+                                        <td class="px-4 py-3">
+                                            <button @click="deleteApiKey(k.id, k.name)" title="删除"
+                                                class="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition">
+                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div x-show="apiKeys.length === 0" class="text-center py-12 text-gray-400">
+                        <svg class="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                        <p>暂无 API 密钥</p>
+                        <p class="text-xs mt-1">未设置密钥时，API 无需认证即可访问</p>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- ======================== Usage Tab ======================== -->
+        <template x-if="activeTab === 'usage'">
+            <div class="space-y-6">
+                <!-- Usage Stats Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">总请求数</p>
+                                <p class="text-2xl font-bold text-gray-800 mt-1" x-text="usageStats.totals?.total_requests || 0">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">输入 Tokens</p>
+                                <p class="text-2xl font-bold text-indigo-600 mt-1" x-text="formatNumber(usageStats.totals?.total_input_tokens)">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-indigo-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-indigo-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">输出 Tokens</p>
+                                <p class="text-2xl font-bold text-green-600 mt-1" x-text="formatNumber(usageStats.totals?.total_output_tokens)">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8V20m0 0l4-4m-4 4l-4-4M7 4v12m0 0l-4-4m4 4l4-4"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">缓存命中</p>
+                                <p class="text-2xl font-bold text-amber-600 mt-1" x-text="formatNumber(usageStats.totals?.total_cache_read)">0</p>
+                            </div>
+                            <div class="w-10 h-10 bg-amber-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="bg-white rounded-xl p-5 border border-gray-100 shadow-sm">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-sm text-gray-500">预估总费用</p>
+                                <p class="text-2xl font-bold text-emerald-600 mt-1" x-text="formatUsd(usageStats.totals?.total_cost_usd)">$0.00</p>
+                            </div>
+                            <div class="w-10 h-10 bg-emerald-50 rounded-lg flex items-center justify-center">
+                                <svg class="w-5 h-5 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8V7m0 11v-1m0 0c-1.657 0-3-.895-3-2m3 2c1.657 0 3-.895 3-2"></path></svg>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Filter & Actions Bar -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                    <div class="flex flex-wrap items-center gap-3">
+                        <select x-model="usageDays" @change="loadUsageStats()"
+                            class="px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                            <option value="1">最近 1 天</option>
+                            <option value="7">最近 7 天</option>
+                            <option value="30">最近 30 天</option>
+                            <option value="90">最近 90 天</option>
+                        </select>
+                        <button @click="loadUsageStats(); loadUsageLogs()"
+                            class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition">
+                            刷新
+                        </button>
+                        <div class="flex-1"></div>
+                        <span class="text-xs text-gray-400">
+                            平均耗时: <span x-text="Math.round(usageStats.totals?.avg_duration_ms || 0)"></span>ms |
+                            错误数: <span class="text-red-500" x-text="usageStats.totals?.error_count || 0"></span>
+                        </span>
+                        <button @click="if(confirm('确定要清除所有使用日志？')) clearUsageLogs()"
+                            class="px-3 py-2 text-red-500 hover:bg-red-50 text-sm rounded-lg transition">
+                            清除日志
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Model Breakdown -->
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                        <h3 class="text-sm font-bold text-gray-700 mb-3">按模型统计</h3>
+                        <div class="space-y-2">
+                            <template x-for="m in usageStats.by_model" :key="m.model">
+                                <div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                                    <div>
+                                        <span class="text-sm font-medium text-gray-800" x-text="m.model"></span>
+                                        <span class="text-xs text-gray-400 ml-2" x-text="m.requests + ' 次'"></span>
+                                        <div class="text-xs text-gray-400 mt-1" x-show="m.pricing">
+                                            输入 <span x-text="formatUsd(m.pricing?.input_price_per_m)"></span>/1M
+                                            · 输出 <span x-text="formatUsd(m.pricing?.output_price_per_m)"></span>/1M
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <div class="text-sm font-mono text-gray-600" x-text="formatNumber(m.total_tokens) + ' tokens'"></div>
+                                        <div class="text-xs font-mono text-emerald-600" x-text="formatUsd(m.cost_usd)"></div>
+                                    </div>
+                                </div>
+                            </template>
+                            <div x-show="!usageStats.by_model?.length" class="text-center py-4 text-gray-400 text-sm">暂无数据</div>
+                        </div>
+                    </div>
+
+                    <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                        <h3 class="text-sm font-bold text-gray-700 mb-3">按状态统计</h3>
+                        <div class="space-y-2">
+                            <template x-for="s in usageStats.by_status" :key="s.status">
+                                <div class="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                                    <div>
+                                        <span class="text-sm font-medium"
+                                            :class="s.status === 'error' ? 'text-red-600' : 'text-gray-800'"
+                                            x-text="s.status === 'success' ? '成功' : s.status === 'error' ? '错误' : s.status"></span>
+                                        <span class="text-xs text-gray-400 ml-2" x-text="s.requests + ' 次'"></span>
+                                    </div>
+                                    <span class="text-sm font-mono text-gray-600" x-text="formatNumber(s.total_tokens) + ' tokens'"></span>
+                                </div>
+                            </template>
+                            <div x-show="!usageStats.by_status?.length" class="text-center py-4 text-gray-400 text-sm">暂无数据</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3">官方模型定价</h3>
+                    <p class="text-xs text-gray-400 mb-3">按 2026-04-06 官方公开 API 定价估算，实际账单以供应商结算为准。</p>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">模型</th>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">供应商</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">输入 /1M</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">缓存读 /1M</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">缓存写 /1M</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">输出 /1M</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="m in pricingCatalog" :key="m.model">
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-2 text-sm font-medium text-gray-800">
+                                            <span x-text="m.display_name"></span>
+                                            <span x-show="m.is_default" class="ml-2 px-2 py-0.5 bg-primary/10 text-primary rounded-full text-xs">默认</span>
+                                        </td>
+                                        <td class="px-4 py-2 text-sm text-gray-600" x-text="m.provider"></td>
+                                        <td class="px-4 py-2 text-sm text-right font-mono text-gray-600" x-text="formatUsd(m.input_price_per_m)"></td>
+                                        <td class="px-4 py-2 text-sm text-right font-mono text-gray-600" x-text="formatUsd(m.cache_read_price_per_m)"></td>
+                                        <td class="px-4 py-2 text-sm text-right font-mono text-gray-600" x-text="formatUsd(m.cache_write_price_per_m)"></td>
+                                        <td class="px-4 py-2 text-sm text-right font-mono text-gray-800" x-text="formatUsd(m.output_price_per_m)"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Daily Breakdown -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+                    <h3 class="text-sm font-bold text-gray-700 mb-3">每日统计</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">日期</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">请求数</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">输入 Tokens</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">输出 Tokens</th>
+                                    <th class="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">总 Tokens</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="d in usageStats.daily" :key="d.date">
+                                    <tr class="hover:bg-gray-50">
+                                        <td class="px-4 py-2 text-sm font-medium text-gray-800" x-text="d.date"></td>
+                                        <td class="px-4 py-2 text-sm text-gray-600 text-right" x-text="d.requests"></td>
+                                        <td class="px-4 py-2 text-sm text-gray-600 text-right font-mono" x-text="formatNumber(d.input_tokens)"></td>
+                                        <td class="px-4 py-2 text-sm text-gray-600 text-right font-mono" x-text="formatNumber(d.output_tokens)"></td>
+                                        <td class="px-4 py-2 text-sm font-medium text-gray-800 text-right font-mono" x-text="formatNumber(d.total_tokens)"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                        <div x-show="!usageStats.daily?.length" class="text-center py-8 text-gray-400 text-sm">暂无数据</div>
+                    </div>
+                </div>
+
+                <!-- Recent Logs -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div class="p-4 border-b border-gray-100 flex items-center justify-between">
+                        <h3 class="text-sm font-bold text-gray-700">请求日志</h3>
+                        <div class="flex items-center gap-2">
+                            <select x-model="usageLogFilter.model" @change="loadUsageLogs()"
+                                class="px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary outline-none">
+                                <option value="">全部模型</option>
+                                <option value="claude-opus-4-6">claude-opus-4-6</option>
+                                <option value="claude-sonnet-4-6">claude-sonnet-4-6</option>
+                                <option value="gpt-5.4">gpt-5.4</option>
+                            </select>
+                            <select x-model="usageLogFilter.status" @change="loadUsageLogs()"
+                                class="px-2 py-1 border border-gray-300 rounded text-xs focus:ring-1 focus:ring-primary outline-none">
+                                <option value="">全部状态</option>
+                                <option value="success">成功</option>
+                                <option value="error">错误</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="w-full">
+                            <thead class="bg-gray-50">
+                                <tr>
+                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">时间</th>
+                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">模型</th>
+                                    <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">输入</th>
+                                    <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">输出</th>
+                                    <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">缓存读</th>
+                                    <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">缓存写</th>
+                                    <th class="px-3 py-2 text-right text-xs font-medium text-gray-500 uppercase">耗时</th>
+                                    <th class="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">状态</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-100">
+                                <template x-for="log in usageLogs" :key="log.id">
+                                    <tr class="hover:bg-gray-50 text-xs">
+                                        <td class="px-3 py-2 text-gray-500 whitespace-nowrap" x-text="formatTime(log.created_at)"></td>
+                                        <td class="px-3 py-2">
+                                            <span class="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-xs" x-text="log.model"></span>
+                                        </td>
+                                        <td class="px-3 py-2 text-right font-mono text-gray-600" x-text="formatNumber(log.input_tokens)"></td>
+                                        <td class="px-3 py-2 text-right font-mono text-gray-600" x-text="formatNumber(log.output_tokens)"></td>
+                                        <td class="px-3 py-2 text-right font-mono" :class="log.cache_read_tokens > 0 ? 'text-amber-600' : 'text-gray-300'" x-text="formatNumber(log.cache_read_tokens)"></td>
+                                        <td class="px-3 py-2 text-right font-mono" :class="log.cache_write_tokens > 0 ? 'text-purple-600' : 'text-gray-300'" x-text="formatNumber(log.cache_write_tokens)"></td>
+                                        <td class="px-3 py-2 text-right text-gray-500" x-text="(log.duration_ms / 1000).toFixed(1) + 's'"></td>
+                                        <td class="px-3 py-2">
+                                            <span class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium"
+                                                :class="log.status === 'success' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'"
+                                                x-text="log.status === 'success' ? '成功' : '错误'"></span>
+                                        </td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                        <div x-show="usageLogs.length === 0" class="text-center py-8 text-gray-400 text-sm">暂无日志</div>
+                    </div>
+                    <!-- Pagination -->
+                    <div x-show="usageLogPages > 1" class="px-4 py-3 border-t border-gray-100 flex items-center justify-between">
+                        <span class="text-xs text-gray-500" x-text="'共 ' + usageLogTotal + ' 条'"></span>
+                        <div class="flex items-center space-x-1">
+                            <button @click="usageLogPage > 1 && (usageLogPage--, loadUsageLogs())" :disabled="usageLogPage <= 1"
+                                class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">上一页</button>
+                            <span class="px-2 text-xs text-gray-600" x-text="usageLogPage + ' / ' + usageLogPages"></span>
+                            <button @click="usageLogPage < usageLogPages && (usageLogPage++, loadUsageLogs())" :disabled="usageLogPage >= usageLogPages"
+                                class="px-2 py-1 text-xs border border-gray-300 rounded hover:bg-gray-50 disabled:opacity-50">下一页</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+
+        <!-- ======================== Config Tab ======================== -->
+        <template x-if="activeTab === 'config'">
+            <div class="space-y-6">
+                <!-- API Info -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">API 接入信息</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1">API Base URL</label>
+                            <div class="flex items-center space-x-2">
+                                <code class="flex-1 bg-gray-50 px-4 py-2.5 rounded-lg text-sm font-mono text-gray-800 border border-gray-200" x-text="window.location.origin + '/v1'"></code>
+                                <button @click="navigator.clipboard.writeText(window.location.origin + '/v1'); showToast('已复制')"
+                                    class="px-3 py-2.5 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark transition">复制</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1">API Key</label>
+                            <div x-show="configApiKeys.length > 0" class="space-y-1">
+                                <template x-for="k in configApiKeys" :key="k.id">
+                                    <div class="flex items-center space-x-2">
+                                        <code class="flex-1 bg-gray-50 px-4 py-2.5 rounded-lg text-sm font-mono text-gray-800 border border-gray-200" x-text="maskKey(k.key)"></code>
+                                        <button @click="navigator.clipboard.writeText(k.key); showToast('已复制')"
+                                            class="px-3 py-2.5 bg-primary text-white rounded-lg text-sm hover:bg-primary-dark transition">复制</button>
+                                    </div>
+                                </template>
+                            </div>
+                            <div x-show="configApiKeys.length === 0">
+                                <code class="block bg-gray-50 px-4 py-2.5 rounded-lg text-sm font-mono text-gray-500 border border-gray-200">未设置 API 密钥，无需认证。前往"API 密钥"标签页创建。</code>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-1">支持的模型</label>
+                            <div class="flex flex-wrap gap-2 mt-1">
+                                <span class="px-2.5 py-1 bg-primary/10 text-primary rounded-full text-xs font-medium">claude-opus-4-6 默认</span>
+                                <span class="px-2.5 py-1 bg-blue-50 text-blue-700 rounded-full text-xs font-medium">claude-sonnet-4-6</span>
+                                <span class="px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-full text-xs font-medium">gpt-5.4</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Claude Code Config -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">Claude Code 配置</h3>
+                    <div class="space-y-4">
+                        <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-sm text-amber-800">
+                            <p class="font-medium mb-1">设置环境变量后启动 Claude Code 即可使用本代理</p>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-2">Windows (PowerShell)</label>
+                            <div class="relative">
+                                <pre id="ps-cmd" class="bg-gray-900 text-green-400 px-4 py-3 rounded-lg text-sm font-mono overflow-x-auto" x-text="'$env:ANTHROPIC_BASE_URL=\'' + window.location.origin + '\'\nclaude'"></pre>
+                                <button @click="navigator.clipboard.writeText('$env:ANTHROPIC_BASE_URL=\'' + window.location.origin + '\'\nclaude'); showToast('已复制')"
+                                    class="absolute top-2 right-2 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition">复制</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-2">Windows (CMD)</label>
+                            <div class="relative">
+                                <pre id="cmd-cmd" class="bg-gray-900 text-green-400 px-4 py-3 rounded-lg text-sm font-mono overflow-x-auto" x-text="'set ANTHROPIC_BASE_URL=' + window.location.origin + '\nclaude'"></pre>
+                                <button @click="navigator.clipboard.writeText('set ANTHROPIC_BASE_URL=' + window.location.origin + '\nclaude'); showToast('已复制')"
+                                    class="absolute top-2 right-2 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition">复制</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-2">Linux / macOS (Bash)</label>
+                            <div class="relative">
+                                <pre id="bash-cmd" class="bg-gray-900 text-green-400 px-4 py-3 rounded-lg text-sm font-mono overflow-x-auto" x-text="'ANTHROPIC_BASE_URL=' + window.location.origin + ' claude'"></pre>
+                                <button @click="navigator.clipboard.writeText('ANTHROPIC_BASE_URL=' + window.location.origin + ' claude'); showToast('已复制')"
+                                    class="absolute top-2 right-2 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition">复制</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-2">如果设置了 API Key</label>
+                            <div class="relative">
+                                <pre class="bg-gray-900 text-green-400 px-4 py-3 rounded-lg text-sm font-mono overflow-x-auto" x-text="'$env:ANTHROPIC_BASE_URL=\'' + window.location.origin + '\'\n$env:ANTHROPIC_API_KEY=\'' + (configApiKeys.length > 0 ? configApiKeys[0].key : 'your-api-key') + '\'\nclaude'"></pre>
+                                <button @click="navigator.clipboard.writeText('$env:ANTHROPIC_BASE_URL=\'' + window.location.origin + '\'\n$env:ANTHROPIC_API_KEY=\'' + (configApiKeys.length > 0 ? configApiKeys[0].key : 'your-api-key') + '\'\nclaude'); showToast('已复制')"
+                                    class="absolute top-2 right-2 px-2 py-1 bg-gray-700 text-gray-300 rounded text-xs hover:bg-gray-600 transition">复制</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Other tools -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">其他工具接入</h3>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-2">Cursor / Cline / 其他兼容 Anthropic API 的工具</label>
+                            <div class="bg-gray-50 rounded-lg p-4 text-sm text-gray-700 space-y-2 border border-gray-200">
+                                <p><span class="font-medium">API Base URL:</span> <code class="bg-white px-1.5 py-0.5 rounded border text-xs" x-text="window.location.origin"></code></p>
+                                <p><span class="font-medium">API Key:</span> <code class="bg-white px-1.5 py-0.5 rounded border text-xs" x-text="configApiKeys.length > 0 ? maskKey(configApiKeys[0].key) : '未设置（无需填写）'"></code></p>
+                                <p><span class="font-medium">Model:</span> <code class="bg-white px-1.5 py-0.5 rounded border text-xs">claude-opus-4-6</code> 默认，可选 <code class="bg-white px-1.5 py-0.5 rounded border text-xs">claude-sonnet-4-6</code> / <code class="bg-white px-1.5 py-0.5 rounded border text-xs">gpt-5.4</code></p>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-medium text-gray-600 mb-2">cURL 测试命令</label>
+                            <div class="relative">
+                                <pre class="bg-gray-900 text-green-400 px-4 py-3 rounded-lg text-sm font-mono overflow-x-auto whitespace-pre" x-text="'curl ' + window.location.origin + '/v1/messages \\\n  -H &quot;Content-Type: application/json&quot; \\\n  -H &quot;x-api-key: your-api-key&quot; \\\n  -d \'{\n    &quot;model&quot;: &quot;claude-opus-4-6&quot;,\n    &quot;max_tokens&quot;: 1024,\n    &quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello!&quot;}]\n  }\''"></pre>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Health Check -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">服务状态</h3>
+                    <div class="flex items-center space-x-4">
+                        <button @click="checkHealth()" class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm transition">检查服务</button>
+                        <span x-show="healthResult" class="text-sm" :class="healthResult?.status === 'ok' ? 'text-green-600' : 'text-red-600'" x-text="healthResult ? ('状态: ' + healthResult.status + ' | 活跃账号: ' + healthResult.active_accounts) : ''"></span>
+                    </div>
+                </div>
+
+                <!-- Export Config -->
+                <div class="bg-white rounded-xl border border-gray-100 shadow-sm p-6">
+                    <h3 class="text-lg font-bold text-gray-800 mb-4">导出配置</h3>
+                    <div class="space-y-3">
+                        <p class="text-sm text-gray-600">导出当前代理的连接配置，可分享给他人快速接入。</p>
+                        <div class="flex items-center space-x-3">
+                            <button @click="exportConfig()"
+                                class="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition flex items-center space-x-1">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                                <span>导出 JSON 配置</span>
+                            </button>
+                            <button @click="copyConfig()"
+                                class="px-4 py-2 bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 text-sm font-medium rounded-lg transition">
+                                复制配置到剪贴板
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </template>
+    </main>
+
+    <!-- ======================== Modals ======================== -->
+
+    <!-- Add/Edit Account Modal -->
+    <div x-show="showAddModal || showEditModal" x-cloak
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        @click.self="closeModals">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" @click.stop>
+            <div class="p-6 border-b border-gray-100">
+                <h2 class="text-lg font-bold text-gray-800" x-text="showEditModal ? '编辑账号' : '添加账号'"></h2>
+            </div>
+            <form @submit.prevent="saveAccount" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">名称</label>
+                    <input type="text" x-model="form.name" placeholder="账号备注名"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Access Token <span class="text-red-500">*</span></label>
+                    <textarea x-model="form.access_token" required rows="3" placeholder="eyJhbGci..."
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Refresh Token</label>
+                    <textarea x-model="form.refresh_token" rows="3" placeholder="eyJhbGci..."
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"></textarea>
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Project Group ID <span class="text-red-500">*</span></label>
+                    <input type="text" x-model="form.project_group_id" required placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">代理地址</label>
+                    <input type="text" x-model="form.proxy_url" placeholder="http://127.0.0.1:7890"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                    <input type="text" x-model="form.note" placeholder="备注信息"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                </div>
+
+                <div x-show="formError" class="text-red-500 text-sm bg-red-50 p-3 rounded-lg" x-text="formError"></div>
+
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" @click="closeModals"
+                        class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm transition">取消</button>
+                    <button type="submit" :disabled="formLoading"
+                        class="px-6 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
+                        <span x-show="!formLoading">保存</span>
+                        <span x-show="formLoading">保存中...</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Batch Import Modal -->
+    <div x-show="showImportModal" x-cloak
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        @click.self="showImportModal = false">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4" @click.stop>
+            <div class="p-6 border-b border-gray-100">
+                <h2 class="text-lg font-bold text-gray-800">批量导入账号</h2>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="bg-gray-50 rounded-lg p-3 text-xs text-gray-500">
+                    <p class="font-medium mb-1">JSON 格式示例:</p>
+                    <pre class="whitespace-pre-wrap">[
+  {
+    "name": "账号1",
+    "access_token": "eyJ...",
+    "refresh_token": "eyJ...",
+    "project_group_id": "uuid..."
+  }
+]</pre>
+                </div>
+                <textarea x-model="importText" rows="10" placeholder="粘贴 JSON 数组..."
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"></textarea>
+
+                <div x-show="importResult" class="text-sm p-3 rounded-lg"
+                    :class="importResult?.errors?.length ? 'bg-yellow-50 text-yellow-700' : 'bg-green-50 text-green-700'">
+                    <p x-text="'成功导入 ' + (importResult?.imported || 0) + ' 个账号'"></p>
+                    <template x-for="err in (importResult?.errors || [])">
+                        <p class="text-red-500 text-xs mt-1" x-text="err"></p>
+                    </template>
+                </div>
+
+                <div class="flex justify-end space-x-3">
+                    <button @click="showImportModal = false; importText = ''; importResult = null"
+                        class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm transition">关闭</button>
+                    <button @click="doImport" :disabled="importLoading"
+                        class="px-6 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
+                        <span x-show="!importLoading">导入</span>
+                        <span x-show="importLoading">导入中...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Outlook Import Modal -->
+    <div x-show="showOutlookImportModal" x-cloak
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        @click.self="showOutlookImportModal = false">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl mx-4" @click.stop>
+            <div class="p-6 border-b border-gray-100">
+                <h2 class="text-lg font-bold text-gray-800">导入 Outlook 邮箱</h2>
+                <p class="text-sm text-gray-500 mt-1">导入后可一键自动登录 Anything，获取 Token</p>
+            </div>
+            <div class="p-6 space-y-4">
+                <div class="bg-blue-50 rounded-lg p-3 text-xs text-blue-700">
+                    <p class="font-medium mb-1">📧 每行一个邮箱，格式：</p>
+                    <code class="bg-blue-100 px-1.5 py-0.5 rounded">email----password----client_id----ms_refresh_token</code>
+                    <p class="mt-2 text-blue-600">
+                        <strong>流程说明：</strong> 导入后点击"自动登录"，系统将自动：<br>
+                        1️⃣ 向 Anything 发送 Magic Login Link 请求<br>
+                        2️⃣ 通过 Microsoft Graph API 从 Outlook 收件箱轮询邮件<br>
+                        3️⃣ 提取并打开 Magic Link，获取 Token<br>
+                        4️⃣ 自动创建 Anything 账号到系统中
+                    </p>
+                </div>
+                <textarea x-model="outlookImportText" rows="8"
+                    placeholder="user@outlook.com----password123----client-id-xxx----0.refresh_token_xxx..."
+                    class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"></textarea>
+
+                <div x-show="outlookImportResult" class="text-sm p-3 rounded-lg"
+                    :class="outlookImportResult?.errors?.length ? 'bg-yellow-50 text-yellow-700' : 'bg-green-50 text-green-700'">
+                    <p x-text="'成功导入 ' + (outlookImportResult?.imported || 0) + ' 个邮箱'"></p>
+                    <template x-for="err in (outlookImportResult?.errors || [])">
+                        <p class="text-red-500 text-xs mt-1" x-text="err"></p>
+                    </template>
+                </div>
+
+                <div class="flex justify-end space-x-3">
+                    <button @click="showOutlookImportModal = false; outlookImportText = ''; outlookImportResult = null"
+                        class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm transition">关闭</button>
+                    <button @click="doOutlookImport" :disabled="outlookImportLoading"
+                        class="px-6 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
+                        <span x-show="!outlookImportLoading">导入</span>
+                        <span x-show="outlookImportLoading">导入中...</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Outlook Edit Modal -->
+    <div x-show="showOutlookEditModal" x-cloak
+        class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
+        @click.self="closeOutlookModals()">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg mx-4 max-h-[90vh] overflow-y-auto" @click.stop>
+            <div class="p-6 border-b border-gray-100">
+                <h2 class="text-lg font-bold text-gray-800">编辑 Outlook 邮箱</h2>
+            </div>
+            <form @submit.prevent="saveOutlookAccount" class="p-6 space-y-4">
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">邮箱 <span class="text-red-500">*</span></label>
+                    <input type="email" x-model="outlookForm.email" required placeholder="user@outlook.com"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">密码</label>
+                    <input type="text" x-model="outlookForm.password" placeholder="password"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">Client ID</label>
+                    <input type="text" x-model="outlookForm.client_id" placeholder="client-id-xxx"
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary focus:border-transparent outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">MS Refresh Token</label>
+                    <textarea x-model="outlookForm.ms_refresh_token" rows="3" placeholder="0.refresh_token_xxx..."
+                        class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono focus:ring-2 focus:ring-primary focus:border-transparent outline-none resize-none"></textarea>
+                </div>
+
+                <div x-show="outlookFormError" class="text-red-500 text-sm bg-red-50 p-3 rounded-lg" x-text="outlookFormError"></div>
+
+                <div class="flex justify-end space-x-3 pt-2">
+                    <button type="button" @click="closeOutlookModals()"
+                        class="px-4 py-2 text-gray-600 hover:bg-gray-100 rounded-lg text-sm transition">取消</button>
+                    <button type="submit" :disabled="outlookFormLoading"
+                        class="px-6 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium transition disabled:opacity-50">
+                        <span x-show="!outlookFormLoading">保存</span>
+                        <span x-show="outlookFormLoading">保存中...</span>
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div x-show="toast.show" x-cloak
+        x-transition:enter="transform transition ease-out duration-300"
+        x-transition:enter-start="translate-y-2 opacity-0"
+        x-transition:enter-end="translate-y-0 opacity-100"
+        x-transition:leave="transform transition ease-in duration-200"
+        x-transition:leave-start="opacity-100"
+        x-transition:leave-end="opacity-0"
+        class="fixed bottom-6 right-6 z-50 px-4 py-3 rounded-xl shadow-lg text-sm font-medium"
+        :class="toast.type === 'error' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'"
+        x-text="toast.message">
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="/static/js/accounts.js"></script>
+{% endblock %}
