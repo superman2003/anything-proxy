@@ -51,6 +51,15 @@ class BatchDeleteRequest(BaseModel):
     ids: list[int]
 
 
+def _normalize_credit_balance(value):
+    if value in (None, "", "null"):
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
 # ─── Endpoints ─────────────────────────────────────────────────────────
 
 
@@ -487,7 +496,7 @@ async def check_account_balance(account_id: int):
     now = datetime.now(timezone.utc).isoformat()
     try:
         billing = await client.get_billing_info()
-        credit_balance = billing.get("creditBalance")
+        credit_balance = _normalize_credit_balance(billing.get("creditBalance"))
         plan = billing.get("plan") or ""
         org_id = billing.get("organization_id") or ""
 
@@ -522,7 +531,7 @@ async def check_all_balances():
                 proxy_url=acc["proxy_url"],
             )
             billing = await client.get_billing_info()
-            credit_balance = billing.get("creditBalance")
+            credit_balance = _normalize_credit_balance(billing.get("creditBalance"))
             plan = billing.get("plan") or ""
             org_id = billing.get("organization_id") or ""
 

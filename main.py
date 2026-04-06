@@ -81,16 +81,26 @@ async def migrate_from_env():
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
+    print("[startup] init_db...", flush=True)
     await init_db()
+    print("[startup] migrate_sqlite_to_postgres_if_needed...", flush=True)
     await migrate_sqlite_to_postgres_if_needed()
+    print("[startup] migrate_from_env...", flush=True)
     await migrate_from_env()
+    print("[startup] account_pool.load...", flush=True)
     await account_pool.load()
-    logger.info(f"Anything Proxy 已启动 - http://{settings.host}:{settings.port}")
-    logger.info(f"管理后台: http://{settings.host}:{settings.port}/admin/")
-    yield
-    # Shutdown
-    await close_runtime_state()
-    await close_db()
+    startup_url = f"http://{settings.host}:{settings.port}"
+    print(f"[startup] ready: {startup_url}", flush=True)
+    print(f"[startup] admin: {startup_url}/admin/", flush=True)
+    logger.info(f"Anything Proxy 已启动 - {startup_url}")
+    logger.info(f"管理后台: {startup_url}/admin/")
+    try:
+        yield
+    finally:
+        # Shutdown
+        print("[shutdown] closing runtime state and database...", flush=True)
+        await close_runtime_state()
+        await close_db()
 
 
 app = FastAPI(title="Anything AI Proxy", version="2.0.0", lifespan=lifespan)

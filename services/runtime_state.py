@@ -1,6 +1,7 @@
 """Optional Redis-backed runtime state with in-memory fallback."""
 
 import asyncio
+import json
 import logging
 import time
 
@@ -13,6 +14,10 @@ _session_lock = asyncio.Lock()
 _redis = None
 _memory_prompt_cache: dict[str, tuple[int, float]] = {}
 _prompt_cache_lock = asyncio.Lock()
+_memory_working_sets: dict[str, tuple[list[dict], float]] = {}
+_working_set_lock = asyncio.Lock()
+_memory_session_docs: dict[str, tuple[list[dict], float]] = {}
+_session_docs_lock = asyncio.Lock()
 
 
 def _session_key(session_key: str) -> str:
@@ -21,6 +26,14 @@ def _session_key(session_key: str) -> str:
 
 def _prompt_cache_key(content_hash: str) -> str:
     return f"{settings.redis_prefix}:prompt_cache:{content_hash}"
+
+
+def _working_set_key(session_key: str) -> str:
+    return f"{settings.redis_prefix}:working_set:{session_key}"
+
+
+def _session_docs_key(session_key: str) -> str:
+    return f"{settings.redis_prefix}:session_docs:{session_key}"
 
 
 async def _get_redis():
@@ -115,6 +128,78 @@ async def set_prompt_cache(content_hash: str, token_count: int, ttl_seconds: int
             logger.warning(f"Redis 写入 prompt cache 失败，回退内存: {e}")
     async with _prompt_cache_lock:
         _memory_prompt_cache[content_hash] = (token_count, time.monotonic() + ttl_seconds)
+
+
+async def get_session_working_set(session_key: str) -> list[dict]:
+    if not session_key:
+        return []
+    redis = await _get_redis()
+    if redis is not None:
+        try:
+            raw = await redis.get(_working_set_key(session_key))
+            return json.loads(raw) if raw else []
+        except Exception as e:
+            logger.warning(f"Redis 读取 working set 失败，回退内存: {e}")
+    async with _working_set_lock:
+        item = _memory_working_sets.get(session_key)
+        if not item:
+            return []
+        data, expires_at = item
+        if time.monotonic() > expires_at:
+            _memory_working_sets.pop(session_key, None)
+            return []
+        return data
+
+
+async def set_session_working_set(session_key: str, items: list[dict], ttl_seconds: int):
+    if not session_key:
+        return
+    trimmed = items[:5]
+    redis = await _get_redis()
+    if redis is not None:
+        try:
+            await redis.set(_working_set_key(session_key), json.dumps(trimmed, ensure_ascii=False), ex=ttl_seconds)
+            return
+        except Exception as e:
+            logger.warning(f"Redis 写入 working set 失败，回退内存: {e}")
+    async with _working_set_lock:
+        _memory_working_sets[session_key] = (trimmed, time.monotonic() + ttl_seconds)
+
+
+async def get_session_documents(session_key: str) -> list[dict]:
+    if not session_key:
+        return []
+    redis = await _get_redis()
+    if redis is not None:
+        try:
+            raw = await redis.get(_session_docs_key(session_key))
+            return json.loads(raw) if raw else []
+        except Exception as e:
+            logger.warning(f"Redis 读取 session docs 失败，回退内存: {e}")
+    async with _session_docs_lock:
+        item = _memory_session_docs.get(session_key)
+        if not item:
+            return []
+        data, expires_at = item
+        if time.monotonic() > expires_at:
+            _memory_session_docs.pop(session_key, None)
+            return []
+        return data
+
+
+async def set_session_documents(session_key: str, documents: list[dict], ttl_seconds: int):
+    if not session_key:
+        return
+    trimmed = documents[:20]
+    redis = await _get_redis()
+    if redis is not None:
+        try:
+            await redis.set(_session_docs_key(session_key), json.dumps(trimmed, ensure_ascii=False), ex=ttl_seconds)
+            return
+        except Exception as e:
+            logger.warning(f"Redis 写入 session docs 失败，回退内存: {e}")
+    async with _session_docs_lock:
+        _memory_session_docs[session_key] = (trimmed, time.monotonic() + ttl_seconds)
 
 
 async def close_runtime_state():

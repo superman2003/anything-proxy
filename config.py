@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # Server settings
     host: str = "0.0.0.0"
-    port: int = 8000
+    port: int = 3000
 
     # API key for authenticating incoming requests (optional)
     api_key: Optional[str] = None
@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     db_pool_min_size: int = 1
     db_pool_max_size: int = 10
     auto_migrate_sqlite_to_postgres: bool = True
+    db_schema: str = "anything_proxy"
 
     # Redis (optional, recommended for multi-process / server deployments)
     redis_url: Optional[str] = None

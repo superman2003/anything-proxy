@@ -87,8 +87,8 @@ async def migrate_sqlite_to_postgres_if_needed():
 
                 for table in ("accounts", "outlook_accounts", "api_keys", "usage_logs"):
                     await conn.execute(
-                        f"SELECT setval(pg_get_serial_sequence('{table}', 'id'), "
-                        f"COALESCE((SELECT MAX(id) FROM {table}), 1), true)"
+                        f"SELECT setval(pg_get_serial_sequence('{settings.db_schema}.{table}', 'id'), "
+                        f"COALESCE((SELECT MAX(id) FROM \"{settings.db_schema}\".{table}), 1), true)"
                     )
 
         logger.info("SQLite -> PostgreSQL auto-migration completed")

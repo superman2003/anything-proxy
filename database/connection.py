@@ -4,6 +4,7 @@ import asyncio
 from datetime import datetime
 import logging
 import os
+import re
 
 import aiosqlite
 
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 _sqlite_db: aiosqlite.Connection | None = None
 _pg_pool = None
 _write_lock = asyncio.Lock()
+_PG_TABLES = ("accounts", "outlook_accounts", "api_keys", "system_settings", "usage_logs")
 
 
 def get_db_backend() -> str:
@@ -33,6 +35,38 @@ def _convert_placeholders(sql: str) -> str:
         else:
             parts.append(ch)
     return "".join(parts)
+
+
+def _qualify_postgres_sql(sql: str) -> str:
+    schema = settings.db_schema
+    qualified = sql
+    for table in _PG_TABLES:
+        qualified_name = f'"{schema}".{table}'
+        patterns = [
+            rf"(?i)\bFROM\s+{table}\b",
+            rf"(?i)\bJOIN\s+{table}\b",
+            rf"(?i)\bINTO\s+{table}\b",
+            rf"(?i)\bUPDATE\s+{table}\b",
+            rf"(?i)\bDELETE\s+FROM\s+{table}\b",
+            rf"(?i)\bALTER\s+TABLE\s+{table}\b",
+            rf"(?i)\bCREATE\s+TABLE\s+IF\s+NOT\s+EXISTS\s+{table}\b",
+            rf"(?i)\bREFERENCES\s+{table}\b",
+            rf"(?i)\bON\s+{table}\b",
+        ]
+        replacements = [
+            f"FROM {qualified_name}",
+            f"JOIN {qualified_name}",
+            f"INTO {qualified_name}",
+            f"UPDATE {qualified_name}",
+            f"DELETE FROM {qualified_name}",
+            f"ALTER TABLE {qualified_name}",
+            f"CREATE TABLE IF NOT EXISTS {qualified_name}",
+            f"REFERENCES {qualified_name}",
+            f"ON {qualified_name}",
+        ]
+        for pattern, replacement in zip(patterns, replacements):
+            qualified = re.sub(pattern, replacement, qualified)
+    return qualified
 
 
 def _coerce_param(value):
@@ -64,11 +98,24 @@ async def get_db():
     if _pg_pool is None:
         import asyncpg
 
+        admin_conn = await asyncpg.connect(
+            dsn=settings.database_url,
+            command_timeout=60,
+        )
+        try:
+            await admin_conn.execute(f'CREATE SCHEMA IF NOT EXISTS "{settings.db_schema}"')
+        finally:
+            await admin_conn.close()
+
+        async def _init_pg_conn(conn):
+            await conn.execute(f'SET search_path TO "{settings.db_schema}"')
+
         _pg_pool = await asyncpg.create_pool(
             dsn=settings.database_url,
             min_size=settings.db_pool_min_size,
             max_size=settings.db_pool_max_size,
             command_timeout=60,
+            init=_init_pg_conn,
         )
     return _pg_pool
 
@@ -84,7 +131,7 @@ async def execute(sql: str, params: tuple = ()) -> int:
             return cursor.lastrowid
 
     pool = await get_db()
-    query = _convert_placeholders(sql)
+    query = _convert_placeholders(_qualify_postgres_sql(sql))
     params = _coerce_params(params)
     async with _write_lock:
         async with pool.acquire() as conn:
@@ -107,7 +154,7 @@ async def fetchone(sql: str, params: tuple = ()) -> dict | None:
         return dict(row)
 
     pool = await get_db()
-    query = _convert_placeholders(sql)
+    query = _convert_placeholders(_qualify_postgres_sql(sql))
     params = _coerce_params(params)
     async with pool.acquire() as conn:
         row = await conn.fetchrow(query, *params)
@@ -124,7 +171,7 @@ async def fetchall(sql: str, params: tuple = ()) -> list[dict]:
         return [dict(r) for r in rows]
 
     pool = await get_db()
-    query = _convert_placeholders(sql)
+    query = _convert_placeholders(_qualify_postgres_sql(sql))
     params = _coerce_params(params)
     async with pool.acquire() as conn:
         rows = await conn.fetch(query, *params)
@@ -145,7 +192,7 @@ async def execute_script(sql_script: str):
     async with _write_lock:
         async with pool.acquire() as conn:
             for stmt in statements:
-                await conn.execute(stmt)
+                await conn.execute(_qualify_postgres_sql(stmt))
 
 
 async def close_db():

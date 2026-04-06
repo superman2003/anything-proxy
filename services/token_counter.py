@@ -8,6 +8,7 @@ Also provides prompt caching estimation based on content hashing.
 
 import hashlib
 import logging
+import re
 import time
 from datetime import datetime, timezone
 from typing import Optional
@@ -41,13 +42,40 @@ except ImportError:
 
 _CACHE_MAX_SIZE = 256
 _PROMPT_CACHE_TTL_SECONDS = 3600
+MESSAGE_MARKER_RE = re.compile(r"(?m)^\[(user|assistant)\]\n")
 
 
 def _content_hash(text: str) -> str:
     return hashlib.sha256(text.encode()).hexdigest()[:32]
 
 
-async def estimate_cache_tokens(input_text: str) -> tuple[int, int, int]:
+def _extract_cacheable_prefix(input_text: str) -> str:
+    """Approximate Anthropic prompt caching using the stable prompt prefix.
+
+    We first prefer the system/tools portion before the first conversation
+    message. If that is too small, we fall back to everything before the last
+    message block so repeated conversation history can still read from cache.
+    """
+    if not input_text:
+        return ""
+
+    matches = list(MESSAGE_MARKER_RE.finditer(input_text))
+    if not matches:
+        return input_text
+
+    first_prefix = input_text[:matches[0].start()]
+    if count_tokens(first_prefix) >= 1024:
+        return first_prefix
+
+    if len(matches) >= 2:
+        broader_prefix = input_text[:matches[-1].start()]
+        if count_tokens(broader_prefix) >= 1024:
+            return broader_prefix
+
+    return first_prefix
+
+
+async def estimate_cache_tokens(input_text: str, cache_key: str = "") -> tuple[int, int, int]:
     """Estimate cache read/write tokens for input content.
 
     Anthropic caches prompts >= 1024 tokens with matching prefix.
@@ -60,20 +88,25 @@ async def estimate_cache_tokens(input_text: str) -> tuple[int, int, int]:
     if total_input < 1024:
         return total_input, 0, 0
 
-    h = _content_hash(input_text)
+    cacheable_prefix = _extract_cacheable_prefix(input_text)
+    cacheable_tokens = count_tokens(cacheable_prefix)
+
+    if cacheable_tokens < 1024:
+        return total_input, 0, 0
+
+    h = cache_key or _content_hash(cacheable_prefix)
 
     cached_count = await get_prompt_cache(h)
     if cached_count is not None:
         # Cache hit: most tokens are read from cache
         cache_read = cached_count
         cache_write = 0
-        remaining = max(0, total_input - cached_count)
+        remaining = max(0, total_input - cacheable_tokens)
         return remaining, cache_read, cache_write
     else:
         # Cache miss: write the prefix to cache
-        # Anthropic caches the system prompt + tools portion
-        cache_write = total_input
-        await set_prompt_cache(h, total_input, _PROMPT_CACHE_TTL_SECONDS)
+        cache_write = cacheable_tokens
+        await set_prompt_cache(h, cacheable_tokens, _PROMPT_CACHE_TTL_SECONDS)
 
         return total_input, 0, cache_write
 
@@ -103,9 +136,9 @@ class UsageTracker:
     def set_request_id(self, request_id: str):
         self.request_id = request_id
 
-    async def count_input(self, content: str):
+    async def count_input(self, content: str, cache_key: str = ""):
         """Count input tokens with cache estimation."""
-        input_tokens, cache_read, cache_write = await estimate_cache_tokens(content)
+        input_tokens, cache_read, cache_write = await estimate_cache_tokens(content, cache_key=cache_key)
         self.input_tokens = input_tokens
         self.cache_read_tokens = cache_read
         self.cache_write_tokens = cache_write

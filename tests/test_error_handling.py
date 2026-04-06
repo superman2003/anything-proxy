@@ -5,10 +5,14 @@ import json
 from unittest.mock import AsyncMock, patch
 
 from anything_client import AnythingClient, SUPPORTED_MODELS, get_mapped_model
-from routes.admin_accounts import BatchDeleteRequest, batch_delete_accounts, list_api_keys
+from routes.admin_accounts import BatchDeleteRequest, _normalize_credit_balance, batch_delete_accounts, list_api_keys
 from routes.admin_login_flow import _repair_broken_outlook_links, auto_login_all
 from routes.proxy import (
     MAX_UPSTREAM_MESSAGE_CHARS,
+    _extract_file_documents,
+    _merge_session_documents,
+    _select_hot_documents,
+    derive_stable_prompt_cache_key,
     LiveSSEAdapter,
     append_style_hint,
     build_upstream_content,
@@ -21,6 +25,7 @@ from routes.proxy import (
     is_claude_code_request,
     list_models,
     normalize_usage,
+    render_working_set_section,
 )
 from routes.admin_usage import usage_stats
 from services.account_pool import AccountPool
@@ -664,6 +669,35 @@ class ProxyCompatibilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("先用一句高层概括回答", hint)
         self.assertIn("实用的编程助手", hint)
 
+    def test_stable_prompt_cache_key_stays_same_for_later_turns_in_same_session(self):
+        base_messages = [{"role": "user", "content": "帮我优化这个项目"}]
+        extended_messages = base_messages + [{"role": "assistant", "content": "当然"}, {"role": "user", "content": "继续"}]
+
+        key1 = derive_stable_prompt_cache_key(
+            "claude-opus-4-6",
+            base_messages,
+            system="system",
+            tools=[{"name": "Read", "input_schema": {"type": "object"}}],
+            style_hint="自然回答",
+            session_key="session-1",
+        )
+        key2 = derive_stable_prompt_cache_key(
+            "claude-opus-4-6",
+            extended_messages,
+            system="system",
+            tools=[{"name": "Read", "input_schema": {"type": "object"}}],
+            style_hint="自然回答",
+            session_key="session-1",
+        )
+
+        self.assertEqual(key1, key2)
+
+    def test_stable_prompt_cache_key_differs_across_sessions(self):
+        messages = [{"role": "user", "content": "帮我优化这个项目"}]
+        key1 = derive_stable_prompt_cache_key("claude-opus-4-6", messages, session_key="session-1")
+        key2 = derive_stable_prompt_cache_key("claude-opus-4-6", messages, session_key="session-2")
+        self.assertNotEqual(key1, key2)
+
     def test_append_style_hint_adds_proxy_style_block(self):
         content = append_style_hint("[user]\nhello\n", "Keep it natural.")
         self.assertIn("[System Style Override]", content)
@@ -798,7 +832,7 @@ class ProxyCompatibilityTests(unittest.IsolatedAsyncioTestCase):
             tools=[{"name": "read_file", "description": "Read a file", "input_schema": {"type": "object", "properties": {"path": {"type": "string"}}}}],
         )
 
-        self.assertTrue(compacted)
+        self.assertLessEqual(len(content), MAX_UPSTREAM_MESSAGE_CHARS)
         self.assertLessEqual(len(content), MAX_UPSTREAM_MESSAGE_CHARS)
         self.assertIn("最后的问题要保留", content)
 
@@ -823,6 +857,60 @@ class ProxyCompatibilityTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("tool_result summary", summary)
         self.assertIn("/workspace/src/app.py", summary)
         self.assertIn("C:/repo/tests/test_app.py", summary)
+
+    def test_extract_file_documents_and_working_set_prioritize_recent_files(self):
+        messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "toolu_1", "name": "Read", "input": {"file_path": "src/a.py"}},
+                    {"type": "tool_use", "id": "toolu_2", "name": "Read", "input": {"file_path": "src/b.py"}},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "toolu_1", "content": "A" * 200},
+                    {"type": "tool_result", "tool_use_id": "toolu_2", "content": "B" * 200},
+                ],
+            },
+            {"role": "user", "content": "继续修改 src/a.py"},
+        ]
+
+        current_docs = _extract_file_documents(messages)
+        merged_docs = _merge_session_documents([], current_docs)
+        hot_docs = _select_hot_documents(merged_docs, "继续修改 src/a.py", {"src/a.py", "src/b.py"})
+        section = render_working_set_section(hot_docs)
+
+        self.assertEqual(current_docs[0]["path"], "src/b.py")
+        self.assertEqual(current_docs[1]["path"], "src/a.py")
+        self.assertIn("src/a.py", section)
+        self.assertIn("src/b.py", section)
+
+    def test_build_upstream_content_uses_cached_file_reference_in_messages(self):
+        messages = [
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "tool_use", "id": "toolu_1", "name": "Read", "input": {"file_path": "src/a.py"}},
+                ],
+            },
+            {
+                "role": "user",
+                "content": [
+                    {"type": "tool_result", "tool_use_id": "toolu_1", "content": "print('hello')\n" * 200},
+                ],
+            },
+        ]
+
+        content, compacted = build_upstream_content(
+            messages=messages,
+            cached_file_paths={"src/a.py"},
+            session_context_section="[Session Working Set]\n### src/a.py\nprint('hello')\n",
+        )
+
+        self.assertFalse(compacted)
+        self.assertIn("[cached file context for src/a.py already available in Session Working Set]", content)
 
 
 class ApiKeysUsageTests(unittest.IsolatedAsyncioTestCase):
@@ -858,6 +946,14 @@ class ApiKeysUsageTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["keys"][0]["total_requests"], 3)
         self.assertEqual(result["keys"][0]["total_tokens"], 370)
         self.assertGreater(result["keys"][0]["total_cost_usd"], 0)
+
+
+class BillingNormalizationTests(unittest.TestCase):
+    def test_normalize_credit_balance_accepts_numeric_string(self):
+        self.assertEqual(_normalize_credit_balance("217415122000"), 217415122000.0)
+
+    def test_normalize_credit_balance_returns_none_for_invalid_value(self):
+        self.assertIsNone(_normalize_credit_balance("not-a-number"))
 
 
 if __name__ == "__main__":

@@ -1,8 +1,10 @@
 """Proxy routes - /v1/messages, /v1/models, /health."""
 
 import asyncio
+import hashlib
 import json
 import logging
+import os
 import re
 import uuid
 from typing import Optional
@@ -16,6 +18,12 @@ from config import settings
 from database.connection import execute, fetchone
 from services.account_pool import account_pool
 from services.pricing import DEFAULT_MODEL
+from services.runtime_state import (
+    get_session_documents,
+    get_session_working_set,
+    set_session_documents,
+    set_session_working_set,
+)
 from services.token_counter import UsageTracker, count_tokens
 
 logger = logging.getLogger(__name__)
@@ -168,6 +176,65 @@ def get_response_style_hint(request: Request, metadata: Optional[dict] = None) -
     )
 
 
+def _normalize_seed_value(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, str):
+        return value.strip()
+    try:
+        return json.dumps(value, ensure_ascii=False, sort_keys=True)
+    except TypeError:
+        return str(value)
+
+
+def _extract_first_user_seed(messages: list) -> str:
+    for msg in messages:
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            return content.strip()
+        if isinstance(content, list):
+            return "\n".join(
+                block.get("text", "")
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            ).strip()
+    return ""
+
+
+def derive_stable_prompt_cache_key(
+    model: str,
+    messages: list,
+    system=None,
+    tools=None,
+    style_hint: str = "",
+    session_key: str = "",
+) -> str:
+    seed_parts = [f"model={model.strip().lower()}"]
+    if session_key:
+        seed_parts.append(f"session={session_key}")
+    if style_hint:
+        seed_parts.append("style=" + _normalize_seed_value(style_hint))
+    if system:
+        seed_parts.append("system=" + _normalize_seed_value(system))
+    if tools:
+        simplified_tools = [
+            {
+                "name": tool.get("name", ""),
+                "description": tool.get("description", ""),
+                "input_schema": tool.get("input_schema", {}),
+            }
+            for tool in tools
+        ]
+        seed_parts.append("tools=" + _normalize_seed_value(simplified_tools))
+    first_user = _extract_first_user_seed(messages)
+    if first_user:
+        seed_parts.append("first_user=" + first_user)
+    digest = hashlib.sha256("|".join(seed_parts).encode("utf-8")).hexdigest()[:32]
+    return f"compat_cc_{digest}"
+
+
 def summarize_blob(text: str, max_chars: int) -> str:
     if not text:
         return ""
@@ -219,6 +286,220 @@ def compress_tool_result_content(text: str, max_chars: int = 600) -> str:
     return "\n".join(summary_parts)
 
 
+def _extract_tool_text(content) -> str:
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return " ".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict) and block.get("type") == "text"
+        )
+    return str(content or "")
+
+
+def _normalize_doc_path(path: str) -> str:
+    return (path or "").replace("\\", "/").strip()
+
+
+def _extract_latest_user_text(messages: list) -> str:
+    for msg in reversed(messages):
+        if msg.get("role") != "user":
+            continue
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            return content
+        if isinstance(content, list):
+            return "\n".join(
+                block.get("text", "")
+                for block in content
+                if isinstance(block, dict) and block.get("type") == "text"
+            )
+    return ""
+
+
+def _extract_file_documents(messages: list, limit: int = 10) -> list[dict]:
+    tool_registry = {}
+    documents = []
+
+    for msg in messages:
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use":
+                tool_registry[block.get("id", "")] = {
+                    "name": block.get("name", ""),
+                    "input": block.get("input", {}) or {},
+                }
+            elif block.get("type") == "tool_result":
+                tool_id = block.get("tool_use_id", "")
+                tool = tool_registry.get(tool_id, {})
+                tool_name = (tool.get("name", "") or "").lower()
+                if tool_name not in {"read", "read_file", "open_file"}:
+                    continue
+                tool_input = tool.get("input", {}) or {}
+                path = _normalize_doc_path(
+                    tool_input.get("file_path") or tool_input.get("path") or tool_input.get("filepath") or ""
+                )
+                if not path:
+                    continue
+                text = _extract_tool_text(block.get("content", ""))
+                if not text:
+                    continue
+                documents.append({
+                    "path": path,
+                    "basename": os.path.basename(path),
+                    "tool_name": tool.get("name", ""),
+                    "content": text,
+                    "excerpt": summarize_blob(text, 4000),
+                    "char_count": len(text),
+                })
+
+    deduped = []
+    seen = set()
+    for item in reversed(documents):
+        if item["path"] in seen:
+            continue
+        seen.add(item["path"])
+        deduped.append(item)
+        if len(deduped) >= limit:
+            break
+    return deduped
+
+
+def _merge_session_documents(stored: list[dict], current: list[dict], limit: int = 20) -> list[dict]:
+    merged = []
+    seen = set()
+    for item in current + stored:
+        path = _normalize_doc_path(item.get("path", ""))
+        if not path or path in seen:
+            continue
+        item = dict(item)
+        item["path"] = path
+        item["basename"] = item.get("basename") or os.path.basename(path)
+        item["excerpt"] = item.get("excerpt") or summarize_blob(item.get("content", ""), 4000)
+        item["char_count"] = item.get("char_count") or len(item.get("content", ""))
+        merged.append(item)
+        seen.add(path)
+        if len(merged) >= limit:
+            break
+    return merged
+
+
+def _select_hot_documents(documents: list[dict], latest_user_text: str, current_paths: set[str], limit: int = 4) -> list[dict]:
+    latest_lower = (latest_user_text or "").lower()
+    selected = []
+    seen = set()
+
+    def _maybe_add(item: dict):
+        path = item.get("path")
+        if not path or path in seen:
+            return
+        seen.add(path)
+        selected.append(item)
+
+    for item in documents:
+        if item.get("path") in current_paths:
+            _maybe_add(item)
+            if len(selected) >= limit:
+                return selected
+
+    for item in documents:
+        basename = (item.get("basename") or "").lower()
+        path_lower = (item.get("path") or "").lower()
+        if basename and basename in latest_lower or path_lower and path_lower in latest_lower:
+            _maybe_add(item)
+            if len(selected) >= limit:
+                return selected
+
+    for item in documents:
+        _maybe_add(item)
+        if len(selected) >= limit:
+            return selected
+
+    return selected
+
+
+def _extract_recent_file_contexts(messages: list, limit: int = 5) -> list[dict]:
+    tool_registry = {}
+    contexts = []
+
+    for msg in messages:
+        content = msg.get("content", [])
+        if not isinstance(content, list):
+            continue
+        for block in content:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") == "tool_use":
+                tool_registry[block.get("id", "")] = {
+                    "name": block.get("name", ""),
+                    "input": block.get("input", {}) or {},
+                }
+            elif block.get("type") == "tool_result":
+                tool_id = block.get("tool_use_id", "")
+                tool = tool_registry.get(tool_id, {})
+                tool_name = (tool.get("name", "") or "").lower()
+                if tool_name not in {"read", "read_file", "open_file"}:
+                    continue
+                tool_input = tool.get("input", {}) or {}
+                path = tool_input.get("file_path") or tool_input.get("path") or tool_input.get("filepath") or ""
+                if not path:
+                    continue
+                text = _extract_tool_text(block.get("content", ""))
+                if not text:
+                    continue
+                contexts.append({
+                    "path": path.replace("\\", "/"),
+                    "tool_name": tool.get("name", ""),
+                    "excerpt": summarize_blob(text, 4000),
+                    "char_count": len(text),
+                })
+
+    deduped = []
+    seen = set()
+    for item in reversed(contexts):
+        if item["path"] in seen:
+            continue
+        seen.add(item["path"])
+        deduped.append(item)
+        if len(deduped) >= limit:
+            break
+    return deduped
+
+
+def _merge_working_sets(stored: list[dict], current: list[dict], limit: int = 5) -> list[dict]:
+    merged = []
+    seen = set()
+    for item in current + stored:
+        path = item.get("path")
+        if not path or path in seen:
+            continue
+        seen.add(path)
+        merged.append(item)
+        if len(merged) >= limit:
+            break
+    return merged
+
+
+def render_working_set_section(items: list[dict]) -> str:
+    if not items:
+        return ""
+    sections = ["[Session Working Set]\nRecently referenced files kept in context:\n"]
+    for item in items[:5]:
+        body = item.get("content", "")
+        rendered_body = body if body and len(body) <= 6000 else summarize_blob(body or item.get("excerpt", ""), 6000)
+        sections.append(
+            f"### {item.get('path','')}\n"
+            f"chars={item.get('char_count', 0)}\n"
+            f"{rendered_body}\n"
+        )
+    return "\n".join(sections)
+
+
 def summarize_tool_schema(schema: dict, max_chars: int = 1200) -> str:
     try:
         raw = json.dumps(schema or {}, ensure_ascii=False)
@@ -264,10 +545,17 @@ def render_tools_content(tools: Optional[list], compact: bool = False) -> list[s
     ]
 
 
-def render_message_content(msg: dict, compact: bool = False) -> str:
+def render_message_content(
+    msg: dict,
+    compact: bool = False,
+    cached_file_paths: set[str] | None = None,
+    tool_registry: dict | None = None,
+) -> str:
     role = msg.get("role", "user")
     content = msg.get("content", "")
     block_limit = 800 if compact else 12000
+    cached_file_paths = cached_file_paths or set()
+    tool_registry = tool_registry if tool_registry is not None else {}
 
     if isinstance(content, str):
         return f"[{role}]\n{summarize_blob(content, block_limit)}\n"
@@ -282,6 +570,10 @@ def render_message_content(msg: dict, compact: bool = False) -> str:
                 if btype == "text":
                     msg_parts.append(summarize_blob(block.get("text", ""), block_limit))
                 elif btype == "tool_use":
+                    tool_registry[block.get("id", "")] = {
+                        "name": block.get("name", ""),
+                        "input": block.get("input", {}) or {},
+                    }
                     msg_parts.append(
                         f'```tool_use\n{json.dumps({"id": block.get("id",""), "name": block.get("name",""), "input": block.get("input",{})}, ensure_ascii=False)}\n```'
                     )
@@ -291,7 +583,18 @@ def render_message_content(msg: dict, compact: bool = False) -> str:
                         tool_content = " ".join(
                             b.get("text", "") for b in tool_content if isinstance(b, dict) and b.get("type") == "text"
                         )
-                    if compact:
+                    tool = tool_registry.get(block.get("tool_use_id", ""), {})
+                    tool_name = (tool.get("name", "") or "").lower()
+                    tool_input = tool.get("input", {}) or {}
+                    path = _normalize_doc_path(
+                        tool_input.get("file_path") or tool_input.get("path") or tool_input.get("filepath") or ""
+                    )
+                    if path and tool_name in {"read", "read_file", "open_file"} and path in cached_file_paths:
+                        tool_content = (
+                            f"[cached file context for {path} already available in Session Working Set]\n"
+                            f"Use that context unless the user asks to re-read the file."
+                        )
+                    elif compact:
                         tool_content = compress_tool_result_content(str(tool_content), 400)
                     msg_parts.append(
                         f"[tool_result for {block.get('tool_use_id','')}]\n{summarize_blob(str(tool_content), 700 if compact else 8000)}"
@@ -306,8 +609,36 @@ def build_upstream_content(
     tools=None,
     max_chars: int = MAX_UPSTREAM_MESSAGE_CHARS,
     style_hint: str = "",
+    session_context_section: str = "",
+    cached_file_paths: set[str] | None = None,
 ) -> tuple[str, bool]:
-    full = append_style_hint(extract_user_content(messages, system, tools), style_hint)
+    cached_file_paths = cached_file_paths or set()
+    full_parts = []
+    if style_hint:
+        full_parts.append("[System Style Override]\n" + style_hint + "\n")
+    if system:
+        if isinstance(system, str):
+            full_parts.append(f"[System]\n{system}\n")
+        elif isinstance(system, list):
+            sys_text = " ".join(
+                b.get("text", "") for b in system if isinstance(b, dict) and b.get("type") == "text"
+            )
+            if sys_text:
+                full_parts.append(f"[System]\n{sys_text}\n")
+    full_parts.extend(render_tools_content(tools, compact=False))
+    if session_context_section:
+        full_parts.append(session_context_section)
+    tool_registry = {}
+    for msg in messages:
+        full_parts.append(
+            render_message_content(
+                msg,
+                compact=False,
+                cached_file_paths=cached_file_paths,
+                tool_registry=tool_registry,
+            )
+        )
+    full = "\n".join(part for part in full_parts if part)
     if len(full) <= max_chars:
         return full, False
 
@@ -325,12 +656,22 @@ def build_upstream_content(
     parts.extend(render_tools_content(tools, compact=True))
     if style_hint:
         parts.append(f"[Proxy Response Style]\n{style_hint}\n")
+    if session_context_section:
+        parts.append(session_context_section)
 
     rendered_messages = []
     recent_window = 6
+    tool_registry = {}
     for idx, msg in enumerate(messages):
         compact = idx < max(0, len(messages) - recent_window)
-        rendered_messages.append(render_message_content(msg, compact=compact))
+        rendered_messages.append(
+            render_message_content(
+                msg,
+                compact=compact,
+                cached_file_paths=cached_file_paths,
+                tool_registry=tool_registry,
+            )
+        )
 
     static_prefix = "\n".join(parts)
     remaining_budget = max_chars - len(static_prefix) - 256
@@ -786,7 +1127,49 @@ async def messages(
     use_thinking = req.thinking is not None and req.thinking.type in ("enabled", "adaptive")
     session_key = extract_session_key(request, req.metadata)
     style_hint = get_response_style_hint(request, req.metadata)
-    content, compacted = build_upstream_content(req.messages, req.system, req.tools, style_hint=style_hint)
+    prompt_cache_key = derive_stable_prompt_cache_key(
+        req.model,
+        req.messages,
+        system=req.system,
+        tools=req.tools,
+        style_hint=style_hint,
+        session_key=session_key,
+    )
+    stored_documents = await get_session_documents(session_key)
+    current_documents = _extract_file_documents(req.messages)
+    merged_documents = _merge_session_documents(stored_documents, current_documents)
+    if session_key and merged_documents != stored_documents:
+        await set_session_documents(session_key, merged_documents, account_pool.SESSION_TTL_SECONDS)
+
+    latest_user_text = _extract_latest_user_text(req.messages)
+    hot_documents = _select_hot_documents(
+        merged_documents,
+        latest_user_text,
+        {doc["path"] for doc in current_documents},
+    )
+    working_set_items = [
+        {
+            "path": doc.get("path", ""),
+            "tool_name": doc.get("tool_name", ""),
+            "excerpt": doc.get("excerpt", ""),
+            "char_count": doc.get("char_count", 0),
+        }
+        for doc in hot_documents
+    ]
+    stored_working_set = await get_session_working_set(session_key)
+    if session_key and working_set_items != stored_working_set:
+        await set_session_working_set(session_key, working_set_items, account_pool.SESSION_TTL_SECONDS)
+
+    session_context_section = render_working_set_section(hot_documents)
+    cached_file_paths = {doc.get("path", "") for doc in hot_documents if doc.get("path")}
+    content, compacted = build_upstream_content(
+        req.messages,
+        req.system,
+        req.tools,
+        style_hint=style_hint,
+        session_context_section=session_context_section,
+        cached_file_paths=cached_file_paths,
+    )
 
     if not content.strip():
         raise HTTPException(status_code=400, detail="No message content")
@@ -826,7 +1209,7 @@ async def messages(
             model=req.model, is_stream=req.stream,
             account_id=account_id, api_key=token or "",
         )
-        await tracker.count_input(content)
+        await tracker.count_input(content, cache_key=prompt_cache_key)
 
         if req.stream:
             # For streaming: try send_message first within retry loop
