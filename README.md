@@ -6,6 +6,8 @@
 
 - **API 兼容**: 完全兼容 Anthropic Messages API 格式
 - **多账号管理**: 支持添加多个 Anything AI 账号，自动负载均衡
+- **批量导入 Outlook**: 从 Outlook 邮箱批量导入账号凭证
+- **批量自动登录**: 通过 Magic Link 自动登录并获取 Token
 - **Web 管理后台**: 可视化管理账号、查看使用统计
 - **流式响应**: 支持 SSE 流式输出
 - **Token 自动刷新**: 自动维护账号登录状态
@@ -94,8 +96,45 @@ response = client.messages.create(
 - 查看账号状态和使用统计
 - 监控请求日志
 - 配置负载均衡策略
+- **批量导入 Outlook 账号**
+- **批量自动登录**
 
 默认密码: `admin` (可通过 `ADMIN_PASSWORD` 环境变量修改)
+
+### 批量导入 Outlook 账号
+
+在管理后台可以批量导入 Outlook 账号凭证，格式为每行一个账号：
+
+```
+email----password----client_id----ms_refresh_token
+```
+
+导入后，系统会自动通过 IMAP + OAuth2 连接 Outlook 邮箱，用于接收 Anything AI 的 Magic Login Link 邮件。
+
+### 批量自动登录
+
+导入 Outlook 账号后，可以批量触发自动登录流程：
+
+1. 系统向 Anything AI 发送登录请求，触发 Magic Link 邮件
+2. 自动从 Outlook 邮箱读取 Magic Link
+3. 自动打开链接并提取 Token
+4. 保存账号信息到数据库
+5. 自动加载到账号池中
+
+这样可以快速批量创建和管理大量 Anything AI 账号。
+
+### Microsoft Graph API 配置（可选）
+
+如果需要使用 Outlook 批量导入功能，需要配置 Microsoft Graph API：
+
+```env
+MS_CLIENT_ID=your_client_id
+MS_CLIENT_SECRET=your_client_secret
+MS_TENANT_ID=common
+MS_REDIRECT_URI=http://localhost:8000/admin/oauth/callback
+```
+
+在 Azure Portal 创建应用注册并获取凭证。
 
 ## 数据库
 
